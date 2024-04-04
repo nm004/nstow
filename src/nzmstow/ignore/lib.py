@@ -22,13 +22,10 @@ def rparse_gitignores(top, /, gitignore_name='.gitignore'):
     with ExitStack() as stack:
         return parse_ignores( (p, stack.enter_context(open(f)).readlines()) for p, f in ignores )
 
-def iglob_(p, root_dir):
-    return iglob(p, root_dir=root_dir, recursive=True, include_hidden=True, follow_symlinks=False)
-
 def parse_ignores(ignores):
     I = set()
     for base, ll in ignores:
-        if are_ancestors_in(I, base):
+        if _are_ancestors_in(I, base):
             continue
         for l in ll:
             if not (l := l.rstrip('\n')):
@@ -85,10 +82,10 @@ def parse_ignores(ignores):
             assert not os.path.isabs(l)
             assert not 2 * os.sep in l
 
-            m = ( base + os.sep + i for i in iglob_(l, base) )
+            m = ( base + os.sep + i for i in _iglob(l, base) )
             if rm_from_I:
                 for i in sorted(m):
-                    if not are_ancestors_in(I, i):
+                    if not _are_ancestors_in(I, i):
                         try:
                             I.remove(i)
                         except KeyError:
@@ -98,9 +95,12 @@ def parse_ignores(ignores):
 
     for i in I.copy():
         if stat.S_ISDIR(os.lstat(i).st_mode):
-            I.update( i + os.sep + j for j in iglob_('**', i) )
+            I.update( i + os.sep + j for j in _iglob('**', i) )
 
     return I
 
-def are_ancestors_in(I, i):
+def _iglob(p, root_dir):
+    return iglob(p, root_dir=root_dir, recursive=True, include_hidden=True, follow_symlinks=False)
+
+def _are_ancestors_in(I, i):
     return not { i[:j] for j,k in enumerate(i) if k == os.sep }.isdisjoint(I)
