@@ -90,7 +90,7 @@ def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=Fals
          create_abs_link=False, ignore_name='.nzmstow-local-ignore'):
     warn_dry_run(dry_run)
 
-    dst_dirs, src_files, dst_files = scanfs(tgt, *srcs, ignore_name=ignore_name)
+    dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)
 
     for d in dst_dirs:
         mkdir(d, dry_run=dry_run)
@@ -101,15 +101,15 @@ def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=Fals
     else:
         ln = symlink
         kwargs.update(dict(create_abs_link=create_abs_link))
-    batch_apply(partial(ln, **kwargs), src_files, dst_files)
+    batch_apply(partial(ln, **kwargs), src_dst_file_pairs)
 
 def unstow(tgt, /, *srcs, dry_run=False,
            ignore_name='.nzmstow-local-ignore'):
     warn_dry_run(dry_run)
 
-    dst_dirs, src_files, dst_files = scanfs(tgt, *srcs, ignore_name=ignore_name)
+    dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)
 
-    batch_apply(partial(safe_remove, dry_run=dry_run), src_files, dst_files)
+    batch_apply(partial(safe_remove, dry_run=dry_run), src_dst_file_pairs)
 
     for d in reversed(dst_dirs):
         rmdir(d, dry_run=dry_run)
@@ -170,21 +170,22 @@ def scanfs(tgt, /, *srcs, ignore_name):
     del dirs['']
     return (
         tuple( os.path.join(tgt, base) for base in dirs),
-        tuple(files.values()),
-        tuple( os.path.join(tgt, base_f) for base_f in files.keys() )
+        tuple(zip(tuple(files.values()),
+                  tuple( os.path.join(tgt, base_f) for base_f in files.keys() )))
     )
 
-def batch_apply(func, *iterables):
+def batch_apply(func, params_tuple):
     max_workers = os.cpu_count() or 1
-    with cf.ThreadPoolExecutor(max_workers) as ex:
-        n = max_workers + len(iterables[0])
-        Z = zip(*( batched(i, n) for i in iterables ), strict=True)
-        for f in cf.as_completed( ex.submit(batch_func, func, *B) for B in Z ):
-            f.result()
+    n = max(max_workers + 1, len(params_tuple) // max_workers)
+    B = tuple(batched(params_tuple, n))
+    f = partial(batch_exec, func)
 
-def batch_func(func, *iterables):
-    for i in zip(*iterables, strict=True):
-        func(*i)
+    with cf.ThreadPoolExecutor(max_workers) as ex:
+        _ = tuple(ex.map(f, B))
+
+def batch_exec(func, params_tuple):
+    for p in params_tuple:
+        func(*p)
 
 def mkdir(path, /, dry_run):
     try:
