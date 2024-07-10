@@ -1,5 +1,5 @@
-# NZMstow by Nozomi Miyamori is marked with CC0 1.0.
-# This file is a part of NZMstow.
+# nzmstow by Nozomi Miyamori is marked with CC0 1.0.
+# This file is a part of nzmstow.
 
 import os
 import os.path
@@ -176,8 +176,8 @@ def scanfs(tgt, /, *srcs, ignore_name):
 
 def batch_apply(func, *iterables):
     max_workers = os.cpu_count() or 1
-    with cf.ProcessPoolExecutor(max_workers) as ex:
-        n = max_workers + len(iterables[0]) // max_workers
+    with cf.ThreadPoolExecutor(max_workers) as ex:
+        n = max_workers + len(iterables[0])
         Z = zip(*( batched(i, n) for i in iterables ), strict=True)
         for f in cf.as_completed( ex.submit(batch_func, func, *B) for B in Z ):
             f.result()
