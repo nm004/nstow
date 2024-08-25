@@ -1,5 +1,5 @@
-# nzmstow by Nozomi Miyamori is marked with CC0 1.0.
-# This file is a part of nzmstow.
+# This file is a part of nzmstow by Nozomi Miyamori.
+# nzmstow is distributed under CC0 1.0 and the Public Domain.
 
 import os
 import os.path
