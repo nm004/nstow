@@ -266,7 +266,7 @@ def safe_remove(src, path, /, dry_run):
 
 def samefile(path1, path2):
     try:
-        return os.path.samefile(path1, path2)
+        return os.lstat(path1) == os.lstat(path2)
     except (OSError, FileNotFoundError):
         return False
 
