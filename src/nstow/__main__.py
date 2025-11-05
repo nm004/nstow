@@ -1,5 +1,5 @@
-# This file is a part of nzmstow by Nozomi Miyamori.
-# nzmstow is distributed under CC0 1.0 and the Public Domain.
+# This file is a part of nstow by Nozomi Miyamori.
+# nstow is distributed under CC0 1.0 and the Public Domain.
 
 import os
 import os.path
@@ -17,8 +17,7 @@ from .ignore import parse_ignores
 logger = logging.getLogger(__name__)
 
 def main():
-    parser = argparse.ArgumentParser(prog='nzmstow',
-                                     usage='%(prog)s [OPTION]... [-t TARGET] SOURCE...')
+    parser = argparse.ArgumentParser(usage='%(prog)s [OPTION]... [-t TARGET] SOURCE...')
 
     parser.add_argument('-t', help='path to directory where stowing into or deleting from '
                                    'SOURCE (default: current working directory)',
@@ -87,7 +86,7 @@ def main():
         return 1
 
 def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=False,
-         create_abs_link=False, ignore_name='.nzmstow-local-ignore'):
+         create_abs_link=False, ignore_name='.nstowignore'):
     warn_dry_run(dry_run)
 
     dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)
@@ -104,7 +103,7 @@ def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=Fals
     batch_apply(partial(ln, **kwargs), src_dst_file_pairs)
 
 def unstow(tgt, /, *srcs, dry_run=False,
-           ignore_name='.nzmstow-local-ignore'):
+           ignore_name='.nstowignore'):
     warn_dry_run(dry_run)
 
     dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)

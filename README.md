@@ -1,4 +1,4 @@
-nzmstow
+nstow
 ======
 
 Miyamori's minimal [GNU stow](https://www.gnu.org/software/stow/)

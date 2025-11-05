@@ -1,7 +1,7 @@
 [project]
-name = "nzmstow"
-version = "0.19.2"
-description = "Miyamori's simple GNU Stow imitation"
+name = "nstow"
+version = "0.20.0"
+description = "GNU Stow Reimplementation by Nozomi Miyamori"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {file = "COPYING"}
@@ -16,7 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 [project.urls]
-repository = "https://github.com/nm004/nzmstow"
+repository = "https://github.com/nm004/nstow"
 
 [project.scripts]
-nzmstow = "nzmstow:__main__.main"
+nstow = "nstow:__main__.main"
