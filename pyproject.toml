@@ -1,6 +1,6 @@
 [project]
 name = "nstow"
-version = "0.20.1"
+version = "0.21.0"
 description = "GNU Stow Reimplementation by Nozomi Miyamori"
 readme = "README.md"
 requires-python = ">=3.12"

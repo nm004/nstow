@@ -12,4 +12,5 @@ TBD
 License
 --------
 
-CC0
+CC0 (exclude `[](src/nstow/glob.py)`, which is licensed under
+the Python Software Foundation License Version 2)

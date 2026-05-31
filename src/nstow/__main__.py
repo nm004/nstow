@@ -30,6 +30,8 @@ def main():
     parser.add_argument('-n', help='dry-run mode (with -v, you can see what will happen without '
                                    'actually executing commands)',
                         action='store_true')
+    parser.add_argument('-d', help='include dangling symbolic links',
+                        action='store_true')
     parser.add_argument('-l', help='create hard links instead of symbolic links',
                         action='store_true')
     parser.add_argument('-A', help='create symbolic links with the absolute path of source',
@@ -78,7 +80,7 @@ def main():
                     print(f'Target directory \'{args.t}\' and source directory'
                           f' \'{s}\' must be on the same device for hardlink.')
                     return 1
-        kwargs.update(dict(update_target=args.u, create_hardlink=args.l, create_abs_link=args.A))
+        kwargs.update(dict(update_target=args.u, create_hardlink=args.l, skip_dangling_symlink=not args.d, make_abs_link=args.A))
 
     try:
         stw(args.t, *args.source, **kwargs)
@@ -86,7 +88,7 @@ def main():
         return 1
 
 def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=False,
-         create_abs_link=False, ignore_name='.nstowignore'):
+         make_abs_link=False, skip_dangling_symlink=False, ignore_name='.nstowignore'):
     warn_dry_run(dry_run)
 
     dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)
@@ -94,21 +96,22 @@ def stow(tgt, /, *srcs, dry_run=False, update_target=False, create_hardlink=Fals
     for d in dst_dirs:
         mkdir(d, dry_run=dry_run)
 
-    kwargs = dict(dry_run=dry_run, update_target=update_target)
+    kwargs = dict(dry_run=dry_run, update_target=update_target, skip_dangling_symlink=skip_dangling_symlink)
     if create_hardlink:
         ln = link
     else:
         ln = symlink
-        kwargs.update(dict(create_abs_link=create_abs_link))
+        make_link_path = (lambda p1, _: p1) if make_abs_link else os.path.relpath
+        kwargs.update(dict(make_link_path=make_link_path))
     batch_apply(partial(ln, **kwargs), src_dst_file_pairs)
 
-def unstow(tgt, /, *srcs, dry_run=False,
+def unstow(tgt, /, *srcs, dry_run=False, skip_dangling_symlink=False,
            ignore_name='.nstowignore'):
     warn_dry_run(dry_run)
 
     dst_dirs, src_dst_file_pairs = scanfs(tgt, *srcs, ignore_name=ignore_name)
 
-    batch_apply(partial(safe_remove, dry_run=dry_run), src_dst_file_pairs)
+    batch_apply(partial(safe_remove, dry_run=dry_run, skip_dangling_symlink=skip_dangling_symlink), src_dst_file_pairs)
 
     for d in reversed(dst_dirs):
         rmdir(d, dry_run=dry_run)
@@ -212,8 +215,16 @@ def is_same_or_rm(src, dst, /, dry_run, update_target):
         if not dry_run:
             os.remove(dst)
 
-def link(src, dst, /, dry_run, update_target):
+def is_dangling_symlink(path):
+    return os.path.islink(path) and not os.path.exists(path)
+
+def link(src, dst, /, dry_run, update_target, skip_dangling_symlink):
     if is_same_or_rm(src, dst, dry_run, update_target):
+        logger.debug('skip:link:samefile:%s %s', src, dst)
+        return
+
+    if skip_dangling_symlink and is_dangling_symlink(src):
+        logger.debug('skip:link:dangling_symlink:%s', src)
         return
 
     logger.info('link:%s', dst)
@@ -222,34 +233,43 @@ def link(src, dst, /, dry_run, update_target):
     try:
         os.link(src, dst, follow_symlinks=False)
     except FileExistsError as e:
-        logger.warning('link:%s', e)
+        logger.warning('failed:link:%s', e)
     except OSError as e:
         logger.error('failed:link:%s', e)
         raise StowError from e
 
-def symlink(src, dst, /, dry_run, update_target, create_abs_link):
+def symlink(src, dst, /, dry_run, update_target, skip_dangling_symlink, make_link_path):
     assert os.path.isabs(src)
     assert os.path.isabs(dst)
     if is_same_or_rm(src, dst, dry_run, update_target):
+        logger.debug('skip:symlink:samefile:%s %s', src, dst)
         return
 
-    src = ( os.path.relpath,
-            lambda p1, _: p1 )[create_abs_link](src, os.path.dirname(dst))
-    logger.info('symlink:%s -> %s', src, dst)
+    if skip_dangling_symlink and is_dangling_symlink(src):
+        logger.debug('skip:symlink:dangling_symlink:%s', src)
+        return
+
+    src = make_link_path(src, os.path.dirname(dst))
+
+    logger.info('symlink:%s %s', src, dst)
     if dry_run:
         return
     try:
         os.symlink(src, dst)
     except FileExistsError as e:
-        logger.warning('symlink:%s', e)
+        logger.warning('failed:symlink:%s', e)
     except OSError as e:
         logger.error('failed:symlink:%s', e)
         raise StowError from e
 
-def safe_remove(src, path, /, dry_run):
+def safe_remove(src, path, /, dry_run, skip_dangling_symlink):
     if not samefile(src, path):
-        logger.debug('skip:remove:%s and %s are not the same', src, path)
-        return
+        if not is_dangling_symlink(path):
+            logger.debug('skip:remove:not_samefile:%s %s', src, path)
+            return
+        elif skip_dangling_symlink:
+            logger.debug('skip:remove:dangling_symlink:%s', path)
+            return
 
     logger.info('remove:%s', path)
     if dry_run:
@@ -258,14 +278,14 @@ def safe_remove(src, path, /, dry_run):
         os.remove(path)
     except (IsADirectoryError, FileNotFoundError) as e:
         # maybe never come here
-        logger.debug('remove:%s', e)
+        logger.debug('failed:remove:%s', e)
     except OSError as e:
         logger.error('failed:remove:%s', e)
         raise StowError from e
 
 def samefile(path1, path2):
     try:
-        return os.path.samefile(path1, path2) or os.lstat(path1) == os.lstat(path2)
+        return os.path.samefile(path1, path2)
     except (OSError, FileNotFoundError):
         return False
 
@@ -286,7 +306,7 @@ def rmdir(path, /, dry_run):
         os.rmdir(path)
     except (NotADirectoryError, FileNotFoundError) as e:
         # maybe never come here
-        logger.debug('rmdir:%s', e)
+        logger.debug('failed:rmdir:%s', e)
     except OSError as e:
         logger.error('failed:rmdir:%s', e)
         raise StowError from e
